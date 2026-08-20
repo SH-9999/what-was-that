@@ -1,10 +1,10 @@
 # 🐙 What Was That（那时啥）
 
 <p>
-  <a href="https://github.com/topics/dsh-plugin"><img alt="dsh-plugin" src="https://img.shields.io/badge/dsh-plugin-deepseek_harness-1f8ac7?style=flat-square&amp;logo=opensourceinitiative&logoColor=white"></a>
-  <a href="https://github.com/SH-9999/what-was-that/actions"><img alt="build" src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square"></a>
-  <a href="https://github.com/SH-9999/what-was-that/blob/main/LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
-  <a href="https://github.com/SH-9999/what-was-that"><img alt="type" src="https://img.shields.io/badge/type-static_plugin-orange?style=flat-square"></a>
+<a href="https://github.com/topics/dsh-plugin"><code>dsh-plugin</code></a>
+<a href="https://github.com/SH-9999/what-was-that"><code>DeepSeek Harness 插件</code></a>
+<a href="https://github.com/SH-9999/what-was-that/blob/main/LICENSE"><code>MIT License</code></a>
+<a href="https://github.com/SH-9999/what-was-that"><code>静态插件</code></a>
 </p>
 
 **一个可爱的小章鱼桌面宠物插件，自动帮你"看懂" AI 回复里的术语和黑话。**
