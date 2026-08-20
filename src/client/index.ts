@@ -40,8 +40,8 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 /** Cordis plugin name (matches the bundle id the web server serves). */
 export const name = 'what-was-that'
 
-/** Services required before load: the Typert Remote face and the slots provider. */
-export const inject = ['remote', 'slots']
+/** Services required before load: the Typert Remote face, the slots provider, and the carrier connection. */
+export const inject = ['remote', 'slots', 'connection']
 
 /** Stable <style> element id (idempotent injection across reloads). */
 export const STYLE_ID = 'wwt-style'
@@ -342,24 +342,44 @@ export function apply(ctx: any) {
   // `ctx.remote.wwt` read, which walks the fiber chain and stops at the
   // Loader's runtime-less internal forks between this entry and the root.
   let wwt: WwtNamespaceFace | undefined
+  console.log('wwt: client apply, slots=', !!ctx.get('slots'), 'remote=', !!ctx.get('remote'))
   ctx.effect(
     function () {
       let dispose: () => Promise<void> | void = function () {}
-      const w = (ctx.remote as any).$mount(WWT_REMOTE)
-      Promise.resolve(w).then(function (d: any) {
-        dispose = d
-        wwt = (ctx.reflect as any).get('remote.wwt') as WwtNamespaceFace | undefined
+      const run = async function () {
+        try {
+          dispose = await (ctx.remote as any).$mount(WWT_REMOTE)
+          console.log('wwt: $mount resolved')
+        } catch (e) {
+          console.error('wwt: $mount FAILED', e)
+          return
+        }
+        try {
+          wwt = (ctx.reflect as any).get('remote.wwt') as WwtNamespaceFace | undefined
+        } catch (e) {
+          console.error('wwt: ctx.reflect.get FAILED', e)
+          wwt = undefined
+          return
+        }
+        console.log('wwt: reflect handle =', wwt ? 'mounted (remote.wwt)' : 'UNDEFINED')
         // Fetch the pet SVG frames now that the Remote is mounted, so the pet
         // shows the final assets instead of the inline fallback octopus.
-        if (wwt) {
-          wwt
-            .pet()
-            .then(function (r: any) {
-              if (r && r.ok && r.value && r.value.frames) frameStore.set(r.value.frames)
-            })
-            .catch(function () {})
-        }
-      })
+        if (!wwt) return
+        wwt
+          .pet()
+          .then(function (r: any) {
+            if (r && r.ok && r.value && r.value.frames) {
+              frameStore.set(r.value.frames)
+              console.log('wwt: pet frames OK, count=', Object.keys(r.value.frames).length)
+            } else {
+              console.warn('wwt: pet returned no frames', r)
+            }
+          })
+          .catch(function (e) {
+            console.error('wwt: pet() REJECTED', e)
+          })
+      }
+      run()
       return function () {
         wwt = undefined
         if (typeof dispose === 'function') void dispose()
@@ -722,9 +742,14 @@ export function apply(ctx: any) {
       if (w) {
         w.latest()
           .then(function (r: any) {
+            console.log('wwt: latest =>', r && r.ok, r && r.ok && r.value)
             if (alive && r && r.ok && r.value && r.value.messageId) store.offerTurn(r.value)
           })
-          .catch(function () {})
+          .catch(function (e) {
+            console.error('wwt: latest() REJECTED', e)
+          })
+      } else {
+        console.warn('wwt: TurnSignal latest skipped, wwt handle missing on messageId', messageId)
       }
       return function () {
         alive = false
