@@ -188,6 +188,33 @@ function createSelectStore() {
   }
 }
 
+/** Shared pet-SVG frame store. Populated once the `wwt` Remote is mounted
+ * (frames can only be fetched then), so the pet swaps in the final SVG octopus
+ * instead of falling back to the inline one when it rendered before mount. */
+function createFrameStore() {
+  let frames: Record<string, string> | null = null
+  const subs: Array<() => void> = []
+  function emit() {
+    for (let i = 0; i < subs.length; i++) subs[i]()
+  }
+  return {
+    get: function (): Record<string, string> | null {
+      return frames
+    },
+    subscribe: function (fn: () => void) {
+      subs.push(fn)
+      return function () {
+        const j = subs.indexOf(fn)
+        if (j >= 0) subs.splice(j, 1)
+      }
+    },
+    set: function (f: Record<string, string> | null) {
+      frames = f
+      emit()
+    },
+  }
+}
+
 function MiniOcto() {
   return React.createElement(
     'svg',
@@ -305,6 +332,7 @@ export function apply(ctx: any) {
   }
   const store = createPetStore()
   const selStore = createSelectStore()
+  const frameStore = createFrameStore()
   let petDrag: { sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null
   const deepCounts: Record<string, number> = {}
   adoptStyles()
@@ -321,6 +349,16 @@ export function apply(ctx: any) {
       Promise.resolve(w).then(function (d: any) {
         dispose = d
         wwt = (ctx.reflect as any).get('remote.wwt') as WwtNamespaceFace | undefined
+        // Fetch the pet SVG frames now that the Remote is mounted, so the pet
+        // shows the final assets instead of the inline fallback octopus.
+        if (wwt) {
+          wwt
+            .pet()
+            .then(function (r: any) {
+              if (r && r.ok && r.value && r.value.frames) frameStore.set(r.value.frames)
+            })
+            .catch(function () {})
+        }
       })
       return function () {
         wwt = undefined
@@ -347,6 +385,17 @@ export function apply(ctx: any) {
     React.useEffect(function () {
       return selStore.subscribe(function () {
         setS(selStore.get())
+      })
+    }, [])
+    return s[0]
+  }
+
+  function useFrameStore() {
+    const s = React.useState(frameStore.get())
+    const setS = s[1]
+    React.useEffect(function () {
+      return frameStore.subscribe(function () {
+        setS(frameStore.get())
       })
     }, [])
     return s[0]
@@ -563,22 +612,7 @@ export function apply(ctx: any) {
     const setPos = pos[1]
     const open = React.useState(false)
     const setOpen = open[1]
-    const frames = React.useState(null)
-    const setFrames = frames[1]
-    React.useEffect(function () {
-      let alive = true
-      const w = wwt
-      if (w) {
-        w.pet()
-          .then(function (r: any) {
-            if (alive && r && r.ok && r.value && r.value.frames) setFrames(r.value.frames)
-          })
-          .catch(function () {})
-      }
-      return function () {
-        alive = false
-      }
-    }, [])
+    const frames = useFrameStore()
     const onDown = function (e: any) {
       const r = e.currentTarget.getBoundingClientRect()
       petDrag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false }
@@ -610,8 +644,8 @@ export function apply(ctx: any) {
     const hits = state.turn && state.turn.hits ? state.turn.hits : []
     const badge = hits.length ? React.createElement('div', { className: 'wwt-badge', key: 'b' }, String(hits.length)) : null
     let petEl: any
-    if (frames[0]) {
-      petEl = React.createElement('img', { className: 'wwt-img', src: frames[0][state.mode] || frames[0].idle, alt: '', draggable: false })
+    if (frames) {
+      petEl = React.createElement('img', { className: 'wwt-img', src: frames[state.mode] || frames.idle, alt: '', draggable: false })
     } else {
       petEl = React.createElement('div', { className: 'wwt-body' + (state.mode === 'thinking' ? ' thinking' : '') }, OctoSvg(state.mode))
     }
