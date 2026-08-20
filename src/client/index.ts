@@ -147,13 +147,26 @@ function createPetStore() {
 
 // 阶段2：选区解释卡片的数据源（独立 store，与宠物互不干扰，便于 stop/update 清理）。
 interface SelCard {
-  kind: 'local' | 'thinking' | 'ai' | 'error'
+  kind: 'local' | 'nohit' | 'thinking' | 'ai' | 'error'
   term: string
   cat: string
   text: string
   route: string
   x: number
   y: number
+}
+
+/** localStorage key for the "no-hit AI fallback hint" toggle ('off' disables). */
+const SEL_FALLBACK_KEY = 'wwt-sel-fallback'
+
+/** Whether to pop the "不是词库词" AI-fallback hint for unmatched selections. */
+function selFallbackEnabled() {
+  try {
+    if (typeof localStorage === 'undefined') return true
+    return localStorage.getItem(SEL_FALLBACK_KEY) !== 'off'
+  } catch {
+    return true
+  }
 }
 
 function createSelectStore() {
@@ -472,6 +485,25 @@ export function apply(ctx: any) {
       )
     } else if (card.kind === 'error') {
       inner = React.createElement('div', { className: 'wwt-sel-text' }, '😅 ' + card.text)
+    } else if (card.kind === 'nohit') {
+      const helpBtn = React.createElement(
+        'button',
+        {
+          className: 'wwt-sel-deep',
+          onClick: function (e: any) {
+            e.stopPropagation()
+            selDeep(card.term, card.x, card.y)
+          },
+        },
+        '帮我解释（AI 版）'
+      )
+      inner = React.createElement(
+        'div',
+        null,
+        React.createElement('span', { className: 'wwt-sel-term' }, '「' + card.term + '」不在小词库里'),
+        React.createElement('div', { className: 'wwt-sel-text' }, '要不让 AI 用大白话试试？'),
+        React.createElement('div', { className: 'wwt-sel-actions' }, helpBtn)
+      )
     } else {
       const deepBtn = React.createElement(
         'button',
@@ -804,12 +836,19 @@ export function apply(ctx: any) {
               if (r && r.ok && r.value && r.value.hit) {
                 const h = r.value.hit
                 selStore.set({ kind: 'local', term: h.term, cat: h.cat || '', text: h.explanation, route: '本地词库·零消耗', x: x, y: y })
+              } else if (selFallbackEnabled()) {
+                // 词库外：默认弹一个「帮我解释」AI 兜底（可在设置里关掉）。
+                selStore.set({ kind: 'nohit', term: text.slice(0, 80), cat: '', text: text.slice(0, 120), route: '', x: x, y: y })
               } else {
                 selStore.clear()
               }
             })
             .catch(function () {
-              selStore.clear()
+              if (selFallbackEnabled()) {
+                selStore.set({ kind: 'nohit', term: text.slice(0, 80), cat: '', text: text.slice(0, 120), route: '', x: x, y: y })
+              } else {
+                selStore.clear()
+              }
             })
         } catch (e) {
           selStore.clear()
@@ -844,6 +883,48 @@ export function apply(ctx: any) {
           } },
         function (props: any) {
           return React.createElement(TurnSignal, { props: props })
+        }
+      )
+    })
+  })
+
+  // 设置页开关：选中词不在词库时是否弹出「帮我解释」AI 兜底提示。
+  function SelSettings() {
+    const enabled = React.useState(selFallbackEnabled())
+    const setEnabled = enabled[1]
+    const onChange = function (e: any) {
+      const v = e.target.checked
+      try {
+        localStorage.setItem(SEL_FALLBACK_KEY, v ? 'on' : 'off')
+      } catch {
+        /* ignore */
+      }
+      setEnabled(v)
+    }
+    return React.createElement(
+      'div',
+      { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+      React.createElement(
+        'label',
+        { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' } },
+        React.createElement('input', {
+          type: 'checkbox',
+          checked: enabled[0],
+          onChange: onChange,
+          style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-brand-primary)' },
+        }),
+        '选中词不在词库时，弹出「帮我解释」的 AI 兜底提示'
+      )
+    )
+  }
+  ctx.effect(function () {
+    return slots.inject('settings.section', function () {
+      return slots.register(
+        { name: 'settings.section', id: 'wwt-settings', order: 60, label: function () {
+            return 'What Was That'
+          } },
+        function () {
+          return React.createElement(SelSettings, null)
         }
       )
     })
