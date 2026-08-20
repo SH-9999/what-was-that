@@ -76,12 +76,10 @@ const CSS =
   '@keyframes wwt-shimmer{from{left:-40%}to{left:100%}}' +
   '.wwt-mini{display:inline-block;vertical-align:-3px;flex:none}' +
   // --- 阶段2：选区解释卡片 ---
-  '.wwt-sel{position:fixed;z-index:120;width:min(300px,70vw);background:var(--wwt-soft);color:var(--wwt-fg);border:1px solid var(--wwt-line);border-radius:14px;padding:11px 13px 10px;box-shadow:0 10px 28px rgba(0,0,0,.22);font-size:12.5px;line-height:1.65;font-family:system-ui,-apple-system,sans-serif;animation:wwt-pop .15s ease-out;cursor:default}' +
+  '.wwt-sel{--wwt-soft:var(--dsw-alias-bg-layer-1);--wwt-fg:var(--dsw-alias-label-primary);--wwt-line:var(--dsw-alias-border-l2);position:fixed;z-index:120;width:min(320px,80vw);background:var(--wwt-soft);color:var(--wwt-fg);border:1px solid var(--wwt-line);border-radius:16px;padding:12px 14px;box-shadow:0 12px 32px rgba(0,0,0,.22);font-size:13px;line-height:1.7;font-family:system-ui,-apple-system,sans-serif;text-align:left;animation:wwt-pop .15s ease-out;cursor:default;pointer-events:auto}' +
   '.wwt-sel-term{font-weight:700;font-size:13.5px;color:var(--dsw-alias-state-business-primary)}' +
   '.wwt-sel-cat{font-size:10.5px;opacity:.55;margin-left:6px}' +
   '.wwt-sel-text{margin:5px 0 8px;white-space:pre-wrap}' +
-  '.wwt-sel-close{position:absolute;top:6px;right:8px;border:0;background:none;color:var(--wwt-fg);opacity:.5;font-size:15px;cursor:pointer;line-height:1;padding:2px}' +
-  '.wwt-sel-close:hover{opacity:.9}' +
   '.wwt-sel-actions{display:flex;gap:8px;align-items:center;justify-content:space-between}' +
   '.wwt-sel-deep{border:1px solid var(--wwt-line);background:none;color:var(--wwt-fg);border-radius:8px;font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit}' +
   '.wwt-sel-deep:hover{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 14%, transparent)}' +
@@ -443,9 +441,25 @@ export function apply(ctx: any) {
       })
   }
 
-  // 阶段2：浏览器选区解释卡片。
+  // 阶段2：浏览器选区解释卡片。点卡片外任意处关闭（无关闭按钮）。
   function SelectOverlay() {
     const card = useSelStore()
+    React.useEffect(function () {
+      if (!card) return
+      function onDown(e: any) {
+        // 事件目标在卡片内部则保留卡片，否则点外面即关闭。
+        let t: any = e.target
+        while (t && t !== document) {
+          if (t.classList && t.classList.contains('wwt-sel')) return
+          t = t.parentElement
+        }
+        selStore.clear()
+      }
+      document.addEventListener('pointerdown', onDown, true)
+      return function () {
+        document.removeEventListener('pointerdown', onDown, true)
+      }
+    }, [!!card])
     if (!card) return null
     const style = { left: card.x + 'px', top: card.y + 'px' }
     let inner: any
@@ -487,17 +501,6 @@ export function apply(ctx: any) {
     return React.createElement(
       'div',
       { className: 'wwt-sel', style: style, onPointerDown: stopPtr },
-      React.createElement(
-        'button',
-        {
-          className: 'wwt-sel-close',
-          'aria-label': '关闭',
-          onClick: function () {
-            selStore.clear()
-          },
-        },
-        '✕'
-      ),
       inner
     )
   }
