@@ -31,6 +31,8 @@ export const WWT_MANIFEST: TypertContribution = {
           { kind: 'method', name: 'pet', signature: 'pet(): Promise<PetResult>' },
           { kind: 'method', name: 'latest', signature: 'latest(): LatestResult | null' },
           { kind: 'method', name: 'health', signature: 'health(): HealthResult' },
+          { kind: 'method', name: 'models', signature: 'models(): Promise<ModelsResult>' },
+          { kind: 'method', name: 'setRoute', signature: 'setRoute(provider: string, model: string): SetRouteResult' },
         ],
         types: [],
       },

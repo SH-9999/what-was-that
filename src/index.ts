@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { buildMatchers, cleanText, scan, sentenceAround, type LexEntry, type Matcher } from './core.js'
 import { WwtRuntime, type WwtDeps } from './runtime.js'
 import { WWT_MANIFEST } from './typert.js'
-import type { ExplainResult, HealthResult, LatestResult, PetResult, SelectHit } from './contract.js'
+import type { ExplainResult, HealthResult, LatestResult, ModelOption, ModelsResult, PetResult, SelectHit, SetRouteResult } from './contract.js'
 
 const LIMIT_TEXT = '小章鱼是有底线的，无话可说了~~~'
 
@@ -81,6 +81,9 @@ export function apply(ctx: AnyCtx) {
   let matchers: Matcher[] = []
   let lexSize = 0
   let petCache: PetResult | null = null
+  // 固定给 wwt 用的模型线路（null = 跟随对话用的大模型）。每次 dsh 启动为内存态，
+  // 由客户端用 localStorage 里的选择在挂载时调用 setRoute 恢复。
+  let fixedRoute: { provider: string; model: string } | null = null
 
   const assets = assetsDir()
   const LEX_PATH = assets + '/lexicon.json'
@@ -131,7 +134,7 @@ export function apply(ctx: AnyCtx) {
 
   async function aiExplain(term: string, sentence: string, fresh: boolean, depth: number) {
     const llm = ctx.get('llm')
-    const route = resolveRoute()
+    const route = fixedRoute || resolveRoute()
     if (llm === undefined || !route) return { ok: false as const, error: '没有可用的模型线路' }
     const key = term + '||' + (sentence || '')
     if (!fresh) {
@@ -243,6 +246,40 @@ export function apply(ctx: AnyCtx) {
     health(): HealthResult {
       const r = resolveRoute()
       return { ok: true, lexSize, route: r ? r.provider + '/' + r.model : null, seq: globalSeq }
+    },
+
+    async models(): Promise<ModelsResult> {
+      const llm = ctx.get('llm')
+      const def = resolveRoute()
+      const defaultRoute = def ? def.provider + '/' + def.model : null
+      if (!llm || typeof llm.listProviders !== 'function') {
+        return { default: defaultRoute, models: [] }
+      }
+      let providers: Array<{ id: string }> = []
+      try {
+        providers = llm.listProviders() || []
+      } catch {
+        providers = []
+      }
+      const out: ModelOption[] = []
+      for (const p of providers) {
+        let ms: Array<{ id: string; name?: string }> = []
+        try {
+          ms = await llm.listModels(p.id) || []
+        } catch {
+          ms = []
+        }
+        for (const m of ms) {
+          out.push({ provider: p.id, model: m.id, name: m.name || m.id })
+        }
+      }
+      return { default: defaultRoute, models: out }
+    },
+
+    setRoute(provider: string, model: string): SetRouteResult {
+      if (provider && model) fixedRoute = { provider: provider, model: model }
+      else fixedRoute = null
+      return { ok: true }
     },
   }
 

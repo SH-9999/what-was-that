@@ -54,6 +54,25 @@ export interface HealthResult {
   seq: number
 }
 
+/** One selectable model option (provider + model + display name). */
+export interface ModelOption {
+  provider: string
+  model: string
+  name: string
+}
+
+/** JSON value returned by `wwt/models`. */
+export interface ModelsResult {
+  /** The conversation's current default route, as `provider/model` (null if none). */
+  default: string | null
+  models: ModelOption[]
+}
+
+/** JSON value returned by `wwt/setRoute`. */
+export interface SetRouteResult {
+  ok: boolean
+}
+
 // --- Strict zod wire codecs ---
 const explainResultSchema = z.object({
   term: z.string(),
@@ -82,6 +101,16 @@ const healthResultSchema = z.object({
   route: z.string().nullable(),
   seq: z.number(),
 })
+const modelOptionSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  name: z.string(),
+})
+const modelsResultSchema = z.object({
+  default: z.string().nullable(),
+  models: z.array(modelOptionSchema),
+})
+const setRouteResultSchema = z.object({ ok: z.boolean() })
 
 /** Build a strict boundary codec for one parameter or result. */
 function strict(typeSymbol: string, schema: { parse(value: unknown): unknown }) {
@@ -142,5 +171,26 @@ export const WWT_INVOCATIONS: readonly InvocationDescriptor[] = [
     invocation: { kind: 'direct' },
     parameters: [],
     result: strict('what-was-that#HealthResult', healthResultSchema),
+  },
+  {
+    id: 'what-was-that#wwt/models',
+    service: 'wwt',
+    namespace: 'wwt',
+    method: 'models',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    result: strict('what-was-that#ModelsResult', modelsResultSchema),
+  },
+  {
+    id: 'what-was-that#wwt/setRoute',
+    service: 'wwt',
+    namespace: 'wwt',
+    method: 'setRoute',
+    invocation: { kind: 'direct' },
+    parameters: [
+      { name: 'provider', wire: 'provider', source: 'json', codec: strict('what-was-that#string', z.string()) },
+      { name: 'model', wire: 'model', source: 'json', codec: strict('what-was-that#string', z.string()) },
+    ],
+    result: strict('what-was-that#SetRouteResult', setRouteResultSchema),
   },
 ]

@@ -7,7 +7,8 @@
  * profile-loaded bundle can hold separate copies of the decorator module). The
  * `@Remote` decorators stay for documentation and lib-consistent deployments.
  *
- * All methods exchange plain JSON, so the codecs are schema-free `src-json`.
+ * All methods exchange plain JSON; the wire codecs live in contract.ts as
+ * strict zod schemas (the client gateway requires strict codecs at $mount).
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -15,9 +16,11 @@ import type {
   ExplainResult,
   HealthResult,
   LatestResult,
+  ModelsResult,
   PetResult,
   SelectHit,
   SelectResult,
+  SetRouteResult,
 } from './contract.js'
 
 /** One `wwt/explain` request, mirrored from the wire args. */
@@ -36,6 +39,8 @@ export interface WwtDeps {
   pet(): Promise<PetResult>
   latest(): LatestResult | null
   health(): HealthResult
+  models(): Promise<ModelsResult>
+  setRoute(provider: string, model: string): SetRouteResult
 }
 
 /** The wwt host service: turns black-box jargon into plain language. */
@@ -72,5 +77,17 @@ export class WwtRuntime extends TypertRemoteService {
   @Remote
   health(): HealthResult {
     return this.deps.health()
+  }
+
+  /** Enumerate usable model routes for the picker. */
+  @Remote
+  models(): Promise<ModelsResult> {
+    return this.deps.models()
+  }
+
+  /** Pin wwt to a fixed provider/model route (empty strings follow the conversation). */
+  @Remote
+  setRoute(provider: string, model: string): SetRouteResult {
+    return this.deps.setRoute(provider, model)
   }
 }

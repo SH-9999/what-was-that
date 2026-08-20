@@ -147,7 +147,7 @@ function createPetStore() {
 
 // 阶段2：选区解释卡片的数据源（独立 store，与宠物互不干扰，便于 stop/update 清理）。
 interface SelCard {
-  kind: 'local' | 'nohit' | 'thinking' | 'ai' | 'error'
+  kind: 'local' | 'nohit' | 'thinking' | 'ai' | 'error' | 'limit'
   term: string
   cat: string
   text: string
@@ -168,6 +168,22 @@ function selFallbackEnabled() {
     return true
   }
 }
+
+/** localStorage key for the fixed wwt model route ('provider/model', '' = follow conversation). */
+const WWT_MODEL_KEY = 'wwt-model'
+
+/** Read the stored fixed wwt route, or '' to follow the conversation model. */
+function wwtStoredRoute(): string {
+  try {
+    if (typeof localStorage === 'undefined') return ''
+    return localStorage.getItem(WWT_MODEL_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+/** How many consecutive "再讲深一点点" a word gets before the pet's limit line. */
+const SEL_DEEP_LIMIT = 4
 
 function createSelectStore() {
   let card: SelCard | null = null
@@ -346,6 +362,7 @@ export function apply(ctx: any) {
   const frameStore = createFrameStore()
   let petDrag: { sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null
   const deepCounts: Record<string, number> = {}
+  let selDeepCounts: Record<string, number> = {}
   adoptStyles()
 
   // Mount the `wwt` Typert Remote namespace and resolve its callable face.
@@ -373,9 +390,15 @@ export function apply(ctx: any) {
           return
         }
         console.log('wwt: reflect handle =', wwt ? 'mounted (remote.wwt)' : 'UNDEFINED')
+        if (!wwt) return
+        // 恢复设置里选定的固定模型（空 = 跟随对话用的大模型）。
+        const stored = wwtStoredRoute()
+        if (stored) {
+          const i = stored.indexOf('/')
+          if (i > 0) wwt.setRoute(stored.slice(0, i), stored.slice(i + 1))
+        }
         // Fetch the pet SVG frames now that the Remote is mounted, so the pet
         // shows the final assets instead of the inline fallback octopus.
-        if (!wwt) return
         wwt
           .pet()
           .then(function (r: any) {
@@ -432,15 +455,21 @@ export function apply(ctx: any) {
     return s[0]
   }
 
-  // 阶段2：AI 深挖 选区里的这个词（更保守：只发词本身，不带选中文本上下文）。
+  // 阶段2：AI 深挖 选区里的这个词（只发词本身）。可多次，几次后到"小章鱼有底线"为止。
   function selDeep(term: string, x: number, y: number) {
+    const n = (selDeepCounts[term] || 0) + 1
+    selDeepCounts[term] = n
+    if (n >= SEL_DEEP_LIMIT) {
+      selStore.set({ kind: 'limit', term: term, cat: '', text: '', route: '', x: x, y: y })
+      return
+    }
     selStore.set({ kind: 'thinking', term: term, cat: '', text: '', route: '', x: x, y: y })
     const w = wwt
     if (!w) {
       selStore.set({ kind: 'error', term: term, cat: '', text: '插件还没就绪，稍后再试', route: '', x: x, y: y })
       return
     }
-    w.explain(term, '', false, false, 2)
+    w.explain(term, '', true, n >= 2, n)
       .then(function (res: any) {
         if (!res || !res.ok) {
           selStore.set({ kind: 'error', term: term, cat: '', text: (res && res.error && res.error.message) || '解释失败，稍后再试', route: '', x: x, y: y })
@@ -477,14 +506,27 @@ export function apply(ctx: any) {
     const style = { left: card.x + 'px', top: card.y + 'px' }
     let inner: any
     if (card.kind === 'thinking') {
+      // 与气泡的加载态一致：同样用 .wwt-loadbar 闪光条，提示正在生成、没卡住。
       inner = React.createElement(
         'div',
-        { className: 'wwt-sel-nohit' },
-        React.createElement(MiniOcto, { className: 'wwt-sel-mini' }),
-        '正在搬砖查词典……'
+        null,
+        React.createElement(
+          'div',
+          { className: 'wwt-sel-nohit' },
+          React.createElement(MiniOcto, { className: 'wwt-sel-mini' }),
+          '正在搬砖查词典……'
+        ),
+        React.createElement('div', { className: 'wwt-loadbar', title: '正在生成…' })
       )
     } else if (card.kind === 'error') {
       inner = React.createElement('div', { className: 'wwt-sel-text' }, '😅 ' + card.text)
+    } else if (card.kind === 'limit') {
+      inner = React.createElement(
+        'div',
+        { className: 'wwt-sel-text' },
+        React.createElement(MiniOcto, { className: 'wwt-sel-mini' }),
+        '小章鱼是有底线的，无话可说了~~~'
+      )
     } else if (card.kind === 'nohit') {
       const helpBtn = React.createElement(
         'button',
@@ -833,6 +875,8 @@ export function apply(ctx: any) {
           }
           w.select(text)
             .then(function (r: any) {
+              // 新一次选词重新开始计数"再讲深一点点"的深度。
+              selDeepCounts = {}
               if (r && r.ok && r.value && r.value.hit) {
                 const h = r.value.hit
                 selStore.set({ kind: 'local', term: h.term, cat: h.cat || '', text: h.explanation, route: '本地词库·零消耗', x: x, y: y })
@@ -844,6 +888,7 @@ export function apply(ctx: any) {
               }
             })
             .catch(function () {
+              selDeepCounts = {}
               if (selFallbackEnabled()) {
                 selStore.set({ kind: 'nohit', term: text.slice(0, 80), cat: '', text: text.slice(0, 120), route: '', x: x, y: y })
               } else {
@@ -888,11 +933,11 @@ export function apply(ctx: any) {
     })
   })
 
-  // 设置页开关：选中词不在词库时是否弹出「帮我解释」AI 兜底提示。
+  // 设置页：① 固定给 wwt 用的模型；② 选词兜底开关。
   function SelSettings() {
     const enabled = React.useState(selFallbackEnabled())
     const setEnabled = enabled[1]
-    const onChange = function (e: any) {
+    const fallbackChange = function (e: any) {
       const v = e.target.checked
       try {
         localStorage.setItem(SEL_FALLBACK_KEY, v ? 'on' : 'off')
@@ -901,19 +946,108 @@ export function apply(ctx: any) {
       }
       setEnabled(v)
     }
+    const modelSel = React.useState(wwtStoredRoute())
+    const setModelSel = modelSel[1]
+    const models = React.useState([])
+    const setModels = models[1]
+    const defaultRoute = React.useState('')
+    const setDefaultRoute = defaultRoute[1]
+    React.useEffect(function () {
+      const w = wwt
+      if (!w) return
+      let alive = true
+      w.models()
+        .then(function (r: any) {
+          if (alive && r && r.ok && r.value) {
+            setModels(r.value.models || [])
+            setDefaultRoute(r.value.default || '')
+          }
+        })
+        .catch(function () {})
+      return function () {
+        alive = false
+      }
+    }, [])
+    const modelChange = function (e: any) {
+      const v = e.target.value
+      try {
+        localStorage.setItem(WWT_MODEL_KEY, v)
+      } catch {
+        /* ignore */
+      }
+      setModelSel(v)
+      const w = wwt
+      if (!w) return
+      if (v) {
+        const i = v.indexOf('/')
+        w.setRoute(v.slice(0, i), v.slice(i + 1))
+      } else {
+        w.setRoute('', '')
+      }
+    }
+    const modelOptions = models[0].map(function (m: any) {
+      return React.createElement(
+        'option',
+        { key: m.provider + '/' + m.model, value: m.provider + '/' + m.model },
+        m.name + '（' + m.provider + '）'
+      )
+    })
+    const followLabel = defaultRoute[0] ? '跟随对话用的模型（当前：' + defaultRoute[0] + '）' : '跟随对话用的模型（自动）'
     return React.createElement(
       'div',
-      { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+      { style: { display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', color: 'var(--dsw-alias-label-primary)' } },
+      // ① 模型选择
       React.createElement(
         'label',
-        { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' } },
+        { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+        React.createElement('span', { style: { fontWeight: '600' } }, '小章鱼解释词义时用哪个模型？'),
+        React.createElement(
+          'select',
+          {
+            value: modelSel[0],
+            onChange: modelChange,
+            style: {
+              boxSizing: 'border-box',
+              width: '100%',
+              maxWidth: '420px',
+              height: '36px',
+              padding: '0 10px',
+              border: '1px solid var(--dsw-alias-border-l2)',
+              borderRadius: '8px',
+              background: 'var(--dsw-alias-bg-layer-1)',
+              color: 'var(--dsw-alias-label-primary)',
+              fontSize: '13px',
+            },
+          },
+          React.createElement('option', { value: '' }, followLabel),
+          modelOptions
+        ),
+        React.createElement(
+          'span',
+          { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '18px' } },
+          '默认「跟随对话用的模型」就是你现在聊天用的那个；也可以在这里固定选一个别的模型，只给小章鱼解释词义用，不影响你正常对话。'
+        )
+      ),
+      // ② 选词兜底开关
+      React.createElement(
+        'label',
+        { style: { display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' } },
         React.createElement('input', {
           type: 'checkbox',
           checked: enabled[0],
-          onChange: onChange,
-          style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-brand-primary)' },
+          onChange: fallbackChange,
+          style: { width: '16px', height: '16px', marginTop: '2px', accentColor: 'var(--dsw-alias-brand-primary)' },
         }),
-        '选中词不在词库时，弹出「帮我解释」的 AI 兜底提示'
+        React.createElement(
+          'div',
+          { style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
+          React.createElement('span', { style: { fontWeight: '600' } }, '选到词库外不认识的词时，弹「帮我解释」的小提示'),
+          React.createElement(
+            'span',
+            { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '18px' } },
+            '开着：你选中一个没在小词库里的词时，会弹一小条提示，点一下就能让 AI 用大白话讲一遍。关掉：选到词库外的词就什么都不弹。默认开着。'
+          )
+        )
       )
     )
   }

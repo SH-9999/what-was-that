@@ -1,6 +1,6 @@
 /**
  * The client-side Typert Remote contribution for the what-was-that host
- * service: mounts the shared `src-json` descriptors into the `wwt` wire
+ * service: mounts the shared strict-zod descriptors into the `wwt` wire
  * namespace. The client resolves the mounted namespace service through
  * `ctx.reflect.get('remote.wwt')`, NOT the dotted `ctx.remote.wwt` read (which
  * walks the cordis fiber chain and stops at the Loader's runtime-less internal
@@ -8,7 +8,7 @@
  */
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { WWT_INVOCATIONS } from '../contract.js'
-import type { ExplainResult, HealthResult, LatestResult, PetResult, SelectResult } from '../contract.js'
+import type { ExplainResult, HealthResult, LatestResult, ModelsResult, PetResult, SelectResult, SetRouteResult } from '../contract.js'
 
 /** The `wwt` Remote namespace's client contribution. */
 export const WWT_REMOTE: TypertRemoteContribution = {
@@ -29,4 +29,6 @@ export interface WwtNamespaceFace {
   pet(): Promise<RemoteResult<PetResult>>
   latest(): Promise<RemoteResult<LatestResult | null>>
   health(): Promise<RemoteResult<HealthResult>>
+  models(): Promise<RemoteResult<ModelsResult>>
+  setRoute(provider: string, model: string): Promise<RemoteResult<SetRouteResult>>
 }
