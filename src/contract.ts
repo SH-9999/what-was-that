@@ -1,13 +1,15 @@
 /**
  * What Was That — shared Typert wire contract.
  *
- * Host manifest (`src/typert.ts`, registered via `ctx.typert.register`) and
- * client contribution (`src/client/remote.ts`, mounted via `ctx.remote.$mount`)
- * share this single descriptor set, so the browser bundle and the host gateway
- * stay on one wire definition. Every parameter and result is plain JSON, so
- * all codecs use the schema-free `src-json` mode (validated by the Typert
- * registry's `validateCodec`, which returns immediately for `src-json`).
+ * Host manifest (`src/typert.ts`, via `ctx.typert.register`) and client
+ * contribution (`src/client/remote.ts`, via `ctx.remote.$mount`) share this
+ * descriptor set, so both halves stay on one wire definition.
+ *
+ * Every parameter and result uses a STRICT zod codec: the client gateway's
+ * `requireStrictCodec` rejects `src-json` codecs at `$mount` time, so these
+ * must carry a real parse-able schema (mirroring dsh-at-file).
  */
+import { z } from 'zod'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
 
 /** JSON value returned by `wwt/explain`. */
@@ -52,7 +54,41 @@ export interface HealthResult {
   seq: number
 }
 
-/** The `wwt` namespace's strict invocation descriptors (src-json codecs). */
+// --- Strict zod wire codecs ---
+const explainResultSchema = z.object({
+  term: z.string(),
+  cat: z.string(),
+  text: z.string(),
+  source: z.string(),
+  route: z.string(),
+})
+const selectHitSchema = z.object({
+  term: z.string(),
+  cat: z.string(),
+  explanation: z.string(),
+  local: z.boolean(),
+})
+const selectResultSchema = z.object({ hit: selectHitSchema.nullable() })
+const petResultSchema = z.object({ frames: z.record(z.string(), z.string()) })
+const latestSchema = z.object({
+  seq: z.number(),
+  messageId: z.string(),
+  hits: z.array(z.unknown()),
+})
+const latestResultSchema = latestSchema.nullable()
+const healthResultSchema = z.object({
+  ok: z.boolean(),
+  lexSize: z.number(),
+  route: z.string().nullable(),
+  seq: z.number(),
+})
+
+/** Build a strict boundary codec for one parameter or result. */
+function strict(typeSymbol: string, schema: { parse(value: unknown): unknown }) {
+  return { mode: 'strict' as const, typeSymbol, schema }
+}
+
+/** The `wwt` namespace's invocation descriptors (strict codecs). */
 export const WWT_INVOCATIONS: readonly InvocationDescriptor[] = [
   {
     id: 'what-was-that#wwt/explain',
@@ -61,13 +97,13 @@ export const WWT_INVOCATIONS: readonly InvocationDescriptor[] = [
     method: 'explain',
     invocation: { kind: 'direct' },
     parameters: [
-      { name: 'term', wire: 'term', source: 'json', codec: { mode: 'src-json' } },
-      { name: 'messageId', wire: 'messageId', source: 'json', codec: { mode: 'src-json' } },
-      { name: 'deep', wire: 'deep', source: 'json', codec: { mode: 'src-json' } },
-      { name: 'fresh', wire: 'fresh', source: 'json', codec: { mode: 'src-json' } },
-      { name: 'depth', wire: 'depth', source: 'json', codec: { mode: 'src-json' } },
+      { name: 'term', wire: 'term', source: 'json', codec: strict('what-was-that#string', z.string()) },
+      { name: 'messageId', wire: 'messageId', source: 'json', codec: strict('what-was-that#string', z.string()) },
+      { name: 'deep', wire: 'deep', source: 'json', codec: strict('what-was-that#boolean', z.boolean()) },
+      { name: 'fresh', wire: 'fresh', source: 'json', codec: strict('what-was-that#boolean', z.boolean()) },
+      { name: 'depth', wire: 'depth', source: 'json', codec: strict('what-was-that#number', z.number()) },
     ],
-    result: { mode: 'src-json' },
+    result: strict('what-was-that#ExplainResult', explainResultSchema),
   },
   {
     id: 'what-was-that#wwt/select',
@@ -75,8 +111,10 @@ export const WWT_INVOCATIONS: readonly InvocationDescriptor[] = [
     namespace: 'wwt',
     method: 'select',
     invocation: { kind: 'direct' },
-    parameters: [{ name: 'sentence', wire: 'sentence', source: 'json', codec: { mode: 'src-json' } }],
-    result: { mode: 'src-json' },
+    parameters: [
+      { name: 'sentence', wire: 'sentence', source: 'json', codec: strict('what-was-that#string', z.string()) },
+    ],
+    result: strict('what-was-that#SelectResult', selectResultSchema),
   },
   {
     id: 'what-was-that#wwt/pet',
@@ -85,7 +123,7 @@ export const WWT_INVOCATIONS: readonly InvocationDescriptor[] = [
     method: 'pet',
     invocation: { kind: 'direct' },
     parameters: [],
-    result: { mode: 'src-json' },
+    result: strict('what-was-that#PetResult', petResultSchema),
   },
   {
     id: 'what-was-that#wwt/latest',
@@ -94,7 +132,7 @@ export const WWT_INVOCATIONS: readonly InvocationDescriptor[] = [
     method: 'latest',
     invocation: { kind: 'direct' },
     parameters: [],
-    result: { mode: 'src-json' },
+    result: strict('what-was-that#LatestResult', latestResultSchema),
   },
   {
     id: 'what-was-that#wwt/health',
@@ -103,6 +141,6 @@ export const WWT_INVOCATIONS: readonly InvocationDescriptor[] = [
     method: 'health',
     invocation: { kind: 'direct' },
     parameters: [],
-    result: { mode: 'src-json' },
+    result: strict('what-was-that#HealthResult', healthResultSchema),
   },
 ]

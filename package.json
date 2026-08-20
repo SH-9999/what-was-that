@@ -1,7 +1,7 @@
 {
   "name": "what-was-that",
   "description": "A tiny octopus desktop pet that explains AI-jargon in plain language for the DeepSeek Harness web GUI.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -58,6 +58,9 @@
     "@deepseek-ai/dsh-client-ui-slots": { "optional": true },
     "@deepseek-ai/dsh-client-locale": { "optional": true },
     "react": { "optional": true }
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
