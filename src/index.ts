@@ -186,6 +186,20 @@ export function apply(ctx: AnyCtx) {
     const res = await aiExplain(term, sentence, !!(args && args.fresh), depth)
     return { term, source: 'ai', cat: local ? local.c : '', ...res }
   })
+  // 阶段2：选区解释。只做本地扫词（纯词库，零模型消耗、零隐私外泄），
+  // 选中的文字不离开本机宿主；需要 AI 深挖时客户端再单独走 wwt/explain。
+  harness.handle('wwt/select', async function (args: Record<string, unknown>) {
+    const s = args && typeof args.sentence === 'string' ? args.sentence.slice(0, 400) : ''
+    if (!s.trim()) return { ok: true, hit: null }
+    const hits = scan(s, matchers)
+    const first = hits.length ? hits[0] : null
+    if (!first) return { ok: true, hit: null }
+    return {
+      ok: true,
+      hit: { term: first.term, cat: first.cat || '', explanation: first.explanation, local: true },
+    }
+  })
+
   harness.handle('wwt/pet', async function () {
     if (petCache) return petCache
     const fsv = ctx.get('fs')

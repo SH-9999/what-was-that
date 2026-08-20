@@ -56,7 +56,19 @@ const CSS =
   '.wwt-loadbar{position:relative;height:3px;border-radius:2px;background:var(--wwt-line);overflow:hidden;margin-top:9px}' +
   '.wwt-loadbar::after{content:"";position:absolute;left:-40%;top:0;bottom:0;width:40%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--dsw-alias-state-business-primary),transparent);animation:wwt-shimmer 1.1s infinite}' +
   '@keyframes wwt-shimmer{from{left:-40%}to{left:100%}}' +
-  '.wwt-mini{display:inline-block;vertical-align:-3px;flex:none}'
+  '.wwt-mini{display:inline-block;vertical-align:-3px;flex:none}' +
+  // --- 阶段2：选区解释卡片 ---
+  '.wwt-sel{position:fixed;z-index:120;width:min(300px,70vw);background:var(--wwt-soft);color:var(--wwt-fg);border:1px solid var(--wwt-line);border-radius:14px;padding:11px 13px 10px;box-shadow:0 10px 28px rgba(0,0,0,.22);font-size:12.5px;line-height:1.65;font-family:system-ui,-apple-system,sans-serif;animation:wwt-pop .15s ease-out;cursor:default}' +
+  '.wwt-sel-term{font-weight:700;font-size:13.5px;color:var(--dsw-alias-state-business-primary)}' +
+  '.wwt-sel-cat{font-size:10.5px;opacity:.55;margin-left:6px}' +
+  '.wwt-sel-text{margin:5px 0 8px;white-space:pre-wrap}' +
+  '.wwt-sel-close{position:absolute;top:6px;right:8px;border:0;background:none;color:var(--wwt-fg);opacity:.5;font-size:15px;cursor:pointer;line-height:1;padding:2px}' +
+  '.wwt-sel-close:hover{opacity:.9}' +
+  '.wwt-sel-actions{display:flex;gap:8px;align-items:center;justify-content:space-between}' +
+  '.wwt-sel-deep{border:1px solid var(--wwt-line);background:none;color:var(--wwt-fg);border-radius:8px;font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit}' +
+  '.wwt-sel-deep:hover{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 14%, transparent)}' +
+  '.wwt-sel-route{font-size:10px;opacity:.5}' +
+  '.wwt-sel-mini{display:inline-block;vertical-align:-2px;margin-right:4px}'
 
 interface PetState {
   turn: { seq: number; messageId: string; hits: any[] } | null
@@ -99,6 +111,47 @@ function createPetStore() {
     },
     calm: function () {
       set({ mode: state.turn && state.turn.hits && state.turn.hits.length ? 'question' : 'idle', detail: null })
+    },
+  }
+}
+
+// 阶段2：选区解释卡片的数据源（独立 store，与宠物互不干扰，便于 stop/update 清理）。
+interface SelCard {
+  kind: 'local' | 'thinking' | 'ai' | 'error'
+  term: string
+  cat: string
+  text: string
+  route: string
+  x: number
+  y: number
+}
+
+function createSelectStore() {
+  let card: SelCard | null = null
+  const subs: Array<() => void> = []
+  function emit() {
+    for (let i = 0; i < subs.length; i++) subs[i]()
+  }
+  return {
+    get: function (): SelCard | null {
+      return card
+    },
+    subscribe: function (fn: () => void) {
+      subs.push(fn)
+      return function () {
+        const j = subs.indexOf(fn)
+        if (j >= 0) subs.splice(j, 1)
+      }
+    },
+    set: function (c: SelCard | null) {
+      card = c
+      emit()
+    },
+    clear: function () {
+      if (card !== null) {
+        card = null
+        emit()
+      }
     },
   }
 }
@@ -219,6 +272,7 @@ export function apply(ctx: any) {
     return
   }
   const store = createPetStore()
+  const selStore = createSelectStore()
   let petDrag: { sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null
   const deepCounts: Record<string, number> = {}
   ctx.effect(function () {
@@ -234,6 +288,93 @@ export function apply(ctx: any) {
       })
     }, [])
     return s[0]
+  }
+
+  function useSelStore() {
+    const s = React.useState(selStore.get())
+    const setS = s[1]
+    React.useEffect(function () {
+      return selStore.subscribe(function () {
+        setS(selStore.get())
+      })
+    }, [])
+    return s[0]
+  }
+
+  // 阶段2：AI 深挖 选区里的这个词（更保守：只发词本身，不带选中文本上下文）。
+  function selDeep(term: string, x: number, y: number) {
+    selStore.set({ kind: 'thinking', term: term, cat: '', text: '', route: '', x: x, y: y })
+    host
+      .call('wwt/explain', { term: term, messageId: '', deep: false, fresh: false })
+      .then(function (res: any) {
+        if (!res || !res.ok) {
+          selStore.set({ kind: 'error', term: term, cat: '', text: (res && res.error) || '解释失败，稍后再试', route: '', x: x, y: y })
+          return
+        }
+        selStore.set({ kind: 'ai', term: res.term || term, cat: res.cat || '', text: res.text || '', route: res.route || '', x: x, y: y })
+      })
+      .catch(function (e: any) {
+        selStore.set({ kind: 'error', term: term, cat: '', text: String(e), route: '', x: x, y: y })
+      })
+  }
+
+  // 阶段2：浏览器选区解释卡片。
+  function SelectOverlay() {
+    const card = useSelStore()
+    if (!card) return null
+    const style = { left: card.x + 'px', top: card.y + 'px' }
+    let inner: any
+    if (card.kind === 'thinking') {
+      inner = React.createElement(
+        'div',
+        { className: 'wwt-sel-nohit' },
+        React.createElement(MiniOcto, { className: 'wwt-sel-mini' }),
+        '正在搬砖查词典……'
+      )
+    } else if (card.kind === 'error') {
+      inner = React.createElement('div', { className: 'wwt-sel-text' }, '😅 ' + card.text)
+    } else {
+      const deepBtn = React.createElement(
+        'button',
+        {
+          className: 'wwt-sel-deep',
+          onClick: function (e: any) {
+            e.stopPropagation()
+            selDeep(card.term, card.x, card.y)
+          },
+        },
+        '再讲深一点点（AI 版）'
+      )
+      inner = React.createElement(
+        'div',
+        null,
+        React.createElement('span', { className: 'wwt-sel-term' }, card.term),
+        card.cat ? React.createElement('span', { className: 'wwt-sel-cat' }, card.cat) : null,
+        React.createElement('div', { className: 'wwt-sel-text' }, card.text),
+        React.createElement(
+          'div',
+          { className: 'wwt-sel-actions' },
+          deepBtn,
+          card.route ? React.createElement('span', { className: 'wwt-sel-route' }, card.route) : null
+        )
+      )
+    }
+    return React.createElement(
+      'div',
+      { className: 'wwt-sel', style: style, onPointerDown: stopPtr },
+      React.createElement(
+        'button',
+        {
+          className: 'wwt-sel-close',
+          'aria-label': '关闭',
+          onClick: function () {
+            selStore.clear()
+          },
+        },
+        '✕'
+      ),
+      inner
+    )
   }
 
   function askTerm(term: any, messageId: any, deep: any, fresh: any) {
@@ -496,6 +637,64 @@ export function apply(ctx: any) {
           } },
         function () {
           return React.createElement(Pet, null)
+        }
+      )
+    })
+  })
+  // 阶段2：选区解释 —— 静态插件专属（拥有 DOM 才能注册 selectionchange）。
+  ctx.effect(function () {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    function onChange() {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(function () {
+        try {
+          const sel = typeof window !== 'undefined' && window.getSelection ? window.getSelection() : null
+          if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+            selStore.clear()
+            return
+          }
+          const text = (sel.toString() || '').trim()
+          if (text.length < 2 || text.length > 300) {
+            selStore.clear()
+            return
+          }
+          const rect = sel.getRangeAt(0).getBoundingClientRect()
+          const x = Math.min(Math.max(rect.left, 8), window.innerWidth - 240)
+          const y = Math.min(Math.max(rect.bottom + 8, 8), window.innerHeight - 90)
+          selStore.set({ kind: 'thinking', term: '', cat: '', text: text, route: '', x: x, y: y })
+          host
+            .call('wwt/select', { sentence: text })
+            .then(function (r: any) {
+              if (r && r.ok && r.hit) {
+                selStore.set({ kind: 'local', term: r.hit.term, cat: r.hit.cat || '', text: r.hit.explanation, route: '本地词库·零消耗', x: x, y: y })
+              } else {
+                selStore.clear()
+              }
+            })
+            .catch(function () {
+              selStore.clear()
+            })
+        } catch (e) {
+          selStore.clear()
+        }
+      }, 260)
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('selectionchange', onChange)
+    }
+    return function () {
+      document.removeEventListener('selectionchange', onChange)
+      if (timer) clearTimeout(timer)
+    }
+  })
+  ctx.effect(function () {
+    return slots.inject('shell.overlay', function () {
+      return slots.register(
+        { name: 'shell.overlay', id: 'wwt-select', order: 501, label: function () {
+            return 'WWT Selection'
+          } },
+        function () {
+          return React.createElement(SelectOverlay, null)
         }
       )
     })
