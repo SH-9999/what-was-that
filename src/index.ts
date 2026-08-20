@@ -18,6 +18,10 @@ declare const harness: any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCtx = any
 
+// Core pure logic (lexicon matching / scan / cleanText) lives in ../src/core
+// so it can be unit-tested without a DSH runtime.
+import { buildMatchers, cleanText, scan, sentenceAround, type LexEntry, type Matcher } from './core.js'
+
 const LIMIT_TEXT = '小章鱼是有底线的，无话可说了~~~'
 
 const SHORT_SYSTEM =
@@ -29,51 +33,6 @@ const LONG_SYSTEM =
 function assetsDir() {
   const here = fileURLToPath(import.meta.url) // .../lib/index.js
   return here.replace(/[\\/]lib[\\/][^\\/]+\.js$/, '') + '/assets'
-}
-
-interface LexEntry {
-  t: string
-  a?: string[]
-  c?: string
-  e: string
-}
-
-interface Matcher {
-  item: LexEntry
-  pats: RegExp[]
-}
-
-function escapeRe(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function buildMatchers(entries: LexEntry[]): Matcher[] {
-  const matchers: Matcher[] = []
-  for (const item of entries) {
-    const words = [item.t].concat(item.a || [])
-    const pats: RegExp[] = []
-    for (const w of words) {
-      if (/[\u4e00-\u9fa5]/.test(w)) pats.push(new RegExp(escapeRe(w)))
-      else pats.push(new RegExp('(^|[^A-Za-z0-9_-])' + escapeRe(w) + '($|[^A-Za-z0-9_-])', 'i'))
-    }
-    matchers.push({ item, pats })
-  }
-  matchers.sort((a, b) => b.item.t.length - a.item.t.length)
-  return matchers
-}
-
-function cleanText(s: string) {
-  if (!s) return ''
-  s = s.trim()
-  const idx = s.indexOf('请解释')
-  if (idx >= 0) {
-    let after = s.slice(idx + 3)
-    const colon = after.indexOf('：')
-    if (colon >= 0) after = after.slice(colon + 1)
-    s = after.trim()
-  }
-  s = s.replace(/^(所以|那么|首先|好[，,。]?|嗯[，,。]?|先构思[：:]?|因此)/, '').trim()
-  return s
 }
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -143,34 +102,6 @@ export function apply(ctx: AnyCtx) {
       }
     }
     return null
-  }
-
-  function scan(text: string) {
-    const found: { term: string; cat: string | undefined; explanation: string; local: boolean }[] = []
-    const seen: Record<string, boolean> = {}
-    for (let i = 0; i < matchers.length && found.length < 8; i++) {
-      const m = matchers[i]
-      for (let j = 0; j < m.pats.length; j++) {
-        if (m.pats[j].test(text)) {
-          if (!seen[m.item.t]) {
-            seen[m.item.t] = true
-            found.push({ term: m.item.t, cat: m.item.c, explanation: m.item.e, local: true })
-          }
-          break
-        }
-      }
-    }
-    return found
-  }
-
-  function sentenceAround(text: string, term: string) {
-    const low = text.toLowerCase()
-    const t = term.toLowerCase()
-    const i = low.indexOf(t)
-    if (i < 0) return ''
-    const start = Math.max(0, i - 80)
-    const end = Math.min(text.length, i + term.length + 80)
-    return (start > 0 ? '…' : '') + text.slice(start, end).replace(/\s+/g, ' ').trim() + (end < text.length ? '…' : '')
   }
 
   function findLocal(term: string) {
@@ -297,7 +228,7 @@ export function apply(ctx: AnyCtx) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sid = String((session as any)?.id)
       const mid = String(message.id)
-      const hits = scan(text)
+      const hits = scan(text, matchers)
       msgCache.set(mid, { sessionId: sid, messageId: mid, text, hits, time: ev.time })
       latest.set(sid, mid)
       globalSeq++
