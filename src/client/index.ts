@@ -11,21 +11,32 @@
  *  - NO JSX — UI is built with React.createElement(type, props, ...children).
  *  - Only React.createElement / React.useState / React.useEffect are used
  *    (no useRef/useMemo/useContext).
- *  - No window/document/DOM/timers — interaction is via React pointer/click
- *    events and host.call RPC.
+ *  - The static Web client has the DOM: the phase-2 selection explainer uses
+ *    window.getSelection / document.addEventListener('selectionchange').
+ *  - Host RPC goes through the `wwt` Typert Remote namespace: the client
+ *    mounts the contribution with ctx.remote.$mount then resolves the callable
+ *    face via ctx.reflect.get('remote.wwt') — NOT a `host.call` bridge (that
+ *    only exists in the dynamic-plugin sandbox).
  *  - Slots are registered through ctx.get('slots') -> slots.inject + slots.register.
  *  - Styles are injected with styles.insert(cssString) from inside apply().
- *  - host.call routes: wwt/pet, wwt/latest, wwt/explain.
  *
- * React / host / styles are injected into module scope by the client runtime
- * (the DSH ModuleLoader handshake), so they are declared here as loose globals.
+ * React / styles are injected into module scope by the client runtime (the DSH
+ * ModuleLoader handshake), so they are declared here as loose globals.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { WWT_REMOTE, type WwtNamespaceFace } from './remote.js'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+
+/** Cordis plugin name (matches the bundle id the web server serves). */
+export const name = 'what-was-that'
+
+/** Services required before load: the Typert Remote face and the slots provider. */
+export const inject = ['remote', 'slots']
+
 // Runtime-injected globals (loose `any` typing per porting requirements).
 declare const React: any
-declare const host: any
 declare const styles: any
 
 const CSS =
@@ -279,6 +290,27 @@ export function apply(ctx: any) {
     return styles.insert(CSS)
   })
 
+  // Mount the `wwt` Typert Remote namespace and resolve its callable face.
+  // The face comes from `ctx.reflect.get('remote.wwt')` — NOT the dotted
+  // `ctx.remote.wwt` read, which walks the fiber chain and stops at the
+  // Loader's runtime-less internal forks between this entry and the root.
+  let wwt: WwtNamespaceFace | undefined
+  ctx.effect(
+    function () {
+      let dispose: () => Promise<void> | void = function () {}
+      const w = (ctx.remote as any).$mount(WWT_REMOTE)
+      Promise.resolve(w).then(function (d: any) {
+        dispose = d
+        wwt = (ctx.reflect as any).get('remote.wwt') as WwtNamespaceFace | undefined
+      })
+      return function () {
+        wwt = undefined
+        if (typeof dispose === 'function') void dispose()
+      }
+    },
+    'wwt: remote'
+  )
+
   function useStore() {
     const s = React.useState(store.get())
     const setS = s[1]
@@ -304,14 +336,19 @@ export function apply(ctx: any) {
   // 阶段2：AI 深挖 选区里的这个词（更保守：只发词本身，不带选中文本上下文）。
   function selDeep(term: string, x: number, y: number) {
     selStore.set({ kind: 'thinking', term: term, cat: '', text: '', route: '', x: x, y: y })
-    host
-      .call('wwt/explain', { term: term, messageId: '', deep: false, fresh: false })
+    const w = wwt
+    if (!w) {
+      selStore.set({ kind: 'error', term: term, cat: '', text: '插件还没就绪，稍后再试', route: '', x: x, y: y })
+      return
+    }
+    w.explain(term, '', false, false, 2)
       .then(function (res: any) {
         if (!res || !res.ok) {
-          selStore.set({ kind: 'error', term: term, cat: '', text: (res && res.error) || '解释失败，稍后再试', route: '', x: x, y: y })
+          selStore.set({ kind: 'error', term: term, cat: '', text: (res && res.error && res.error.message) || '解释失败，稍后再试', route: '', x: x, y: y })
           return
         }
-        selStore.set({ kind: 'ai', term: res.term || term, cat: res.cat || '', text: res.text || '', route: res.route || '', x: x, y: y })
+        const v = res.value
+        selStore.set({ kind: 'ai', term: v.term || term, cat: v.cat || '', text: v.text || '', route: v.route || '', x: x, y: y })
       })
       .catch(function (e: any) {
         selStore.set({ kind: 'error', term: term, cat: '', text: String(e), route: '', x: x, y: y })
@@ -379,14 +416,19 @@ export function apply(ctx: any) {
 
   function askTerm(term: any, messageId: any, deep: any, fresh: any) {
     store.thinking()
-    host
-      .call('wwt/explain', { term: term, messageId: messageId, deep: !!deep, fresh: !!fresh })
+    const w = wwt
+    if (!w) {
+      store.showDetail({ kind: 'error', term: term, text: '插件还没就绪，稍后再试' })
+      return
+    }
+    w.explain(term, messageId || '', !!deep, !!fresh, 1)
       .then(function (res: any) {
         if (!res || !res.ok) {
-          store.showDetail({ kind: 'error', term: term, text: (res && res.error) || '解释失败，稍后再试' })
+          store.showDetail({ kind: 'error', term: term, text: (res && res.error && res.error.message) || '解释失败，稍后再试' })
           return
         }
-        store.showDetail({ kind: 'explain', term: res.term || term, cat: res.cat || '', text: res.text, source: res.source, route: res.route })
+        const v = res.value
+        store.showDetail({ kind: 'explain', term: v.term || term, cat: v.cat || '', text: v.text, source: v.source, route: v.route })
       })
       .catch(function (e: any) {
         store.showDetail({ kind: 'error', term: term, text: String(e) })
@@ -406,14 +448,19 @@ export function apply(ctx: any) {
       return
     }
     store.thinking()
-    host
-      .call('wwt/explain', { term: term, messageId: messageId, deep: true, fresh: n >= 2, depth: n })
+    const w = wwt
+    if (!w) {
+      store.showDetail({ kind: 'error', term: term, text: '插件还没就绪，稍后再试' })
+      return
+    }
+    w.explain(term, messageId || '', true, n >= 2, n)
       .then(function (res: any) {
         if (!res || !res.ok) {
-          store.showDetail({ kind: 'error', term: term, text: (res && res.error) || '解释失败，稍后再试' })
+          store.showDetail({ kind: 'error', term: term, text: (res && res.error && res.error.message) || '解释失败，稍后再试' })
           return
         }
-        store.showDetail({ kind: 'explain', term: res.term || term, cat: res.cat || '', text: res.text, source: res.source, route: res.route })
+        const v = res.value
+        store.showDetail({ kind: 'explain', term: v.term || term, cat: v.cat || '', text: v.text, source: v.source, route: v.route })
       })
       .catch(function (e: any) {
         store.showDetail({ kind: 'error', term: term, text: String(e) })
@@ -501,12 +548,14 @@ export function apply(ctx: any) {
     const setFrames = frames[1]
     React.useEffect(function () {
       let alive = true
-      host
-        .call('wwt/pet', {})
-        .then(function (r: any) {
-          if (alive && r && r.ok && r.frames) setFrames(r.frames)
-        })
-        .catch(function () {})
+      const w = wwt
+      if (w) {
+        w.pet()
+          .then(function (r: any) {
+            if (alive && r && r.ok && r.value && r.value.frames) setFrames(r.value.frames)
+          })
+          .catch(function () {})
+      }
       return function () {
         alive = false
       }
@@ -616,12 +665,14 @@ export function apply(ctx: any) {
     React.useEffect(function () {
       if (!messageId) return
       let alive = true
-      host
-        .call('wwt/latest', {})
-        .then(function (r: any) {
-          if (alive && r && r.messageId) store.offerTurn(r)
-        })
-        .catch(function () {})
+      const w = wwt
+      if (w) {
+        w.latest()
+          .then(function (r: any) {
+            if (alive && r && r.ok && r.value && r.value.messageId) store.offerTurn(r.value)
+          })
+          .catch(function () {})
+      }
       return function () {
         alive = false
       }
@@ -662,11 +713,16 @@ export function apply(ctx: any) {
           const x = Math.min(Math.max(rect.left, 8), window.innerWidth - 240)
           const y = Math.min(Math.max(rect.bottom + 8, 8), window.innerHeight - 90)
           selStore.set({ kind: 'thinking', term: '', cat: '', text: text, route: '', x: x, y: y })
-          host
-            .call('wwt/select', { sentence: text })
+          const w = wwt
+          if (!w) {
+            selStore.clear()
+            return
+          }
+          w.select(text)
             .then(function (r: any) {
-              if (r && r.ok && r.hit) {
-                selStore.set({ kind: 'local', term: r.hit.term, cat: r.hit.cat || '', text: r.hit.explanation, route: '本地词库·零消耗', x: x, y: y })
+              if (r && r.ok && r.value && r.value.hit) {
+                const h = r.value.hit
+                selStore.set({ kind: 'local', term: h.term, cat: h.cat || '', text: h.explanation, route: '本地词库·零消耗', x: x, y: y })
               } else {
                 selStore.clear()
               }
