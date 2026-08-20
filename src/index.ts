@@ -10,6 +10,9 @@
  */
 import { fileURLToPath } from 'node:url'
 
+// Runtime-injected global (the DSH Harness host bridge), supplied by the runtime.
+declare const harness: any
+
 // DSH services are supplied by the runtime as peer deps; narrow typing is
 // loosened here to what the dynamic prototype actually used.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,7 +218,10 @@ export function apply(ctx: AnyCtx) {
     const res = { ok: true, text, route: route.provider + '/' + route.model }
     if (!fresh) {
       aiCache.set(key, res)
-      if (aiCache.size > 100) aiCache.delete(aiCache.keys().next().value)
+      if (aiCache.size > 100) {
+        const oldest = aiCache.keys().next().value
+        if (oldest !== undefined) aiCache.delete(oldest)
+      }
     }
     return res
   }
@@ -296,7 +302,10 @@ export function apply(ctx: AnyCtx) {
       latest.set(sid, mid)
       globalSeq++
       globalLatest = { seq: globalSeq, mid, hits }
-      if (msgCache.size > 60) msgCache.delete(msgCache.keys().next().value)
+      if (msgCache.size > 60) {
+        const oldest = msgCache.keys().next().value
+        if (oldest !== undefined) msgCache.delete(oldest)
+      }
     } catch (e) {
       console.error('wwt session/event', e)
     }

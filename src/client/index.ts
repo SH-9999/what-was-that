@@ -88,7 +88,7 @@ function createPetStore() {
       const hits = r.hits || []
       set({ turn: { seq: r.seq, messageId: r.messageId || '', hits: hits }, mode: hits.length ? 'question' : 'idle', detail: null })
     },
-    thinking: function (text: any) {
+    thinking: function (text?: any) {
       set({ mode: 'thinking', detail: text ? { kind: 'thinking', text: text } : state.detail })
     },
     showDetail: function (d: any) {
