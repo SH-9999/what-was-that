@@ -1,7 +1,7 @@
 {
   "name": "what-was-that",
   "description": "Tiny octopus pet that explains AI jargon in plain language",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "entry": {
     "name": "what-was-that",
     "inject": []

@@ -18,14 +18,22 @@
  *    face via ctx.reflect.get('remote.wwt') — NOT a `host.call` bridge (that
  *    only exists in the dynamic-plugin sandbox).
  *  - Slots are registered through ctx.get('slots') -> slots.inject + slots.register.
- *  - Styles are injected with styles.insert(cssString) from inside apply().
+ *  - Styles are injected manually: the static Web client has no `styles` global
+ *    (that is dynamic-plugin only), so a <style> element is built and pushed
+ *    into document.head via adoptStyles().
  *
- * React / styles are injected into module scope by the client runtime (the DSH
- * ModuleLoader handshake), so they are declared here as loose globals.
+ * React is injected into module scope by the client runtime (the DSH
+ * ModuleLoader handshake), so it is declared here as a loose global.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+// React is a real runtime dependency (externalized in the bundle; resolved by
+// the ModuleLoader), but the plugin body stays loosely-typed, so the namespace
+// is rebound as `any` for typecheck while still providing the live value.
+import * as ReactModule from 'react'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const React: any = ReactModule
 import { WWT_REMOTE, type WwtNamespaceFace } from './remote.js'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 
@@ -35,9 +43,8 @@ export const name = 'what-was-that'
 /** Services required before load: the Typert Remote face and the slots provider. */
 export const inject = ['remote', 'slots']
 
-// Runtime-injected globals (loose `any` typing per porting requirements).
-declare const React: any
-declare const styles: any
+/** Stable <style> element id (idempotent injection across reloads). */
+export const STYLE_ID = 'wwt-style'
 
 const CSS =
   '[data-shell-overlay]{z-index:100!important}' +
@@ -80,6 +87,20 @@ const CSS =
   '.wwt-sel-deep:hover{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 14%, transparent)}' +
   '.wwt-sel-route{font-size:10px;opacity:.5}' +
   '.wwt-sel-mini{display:inline-block;vertical-align:-2px;margin-right:4px}'
+
+/**
+ * Inject the stylesheet once into document.head (stable id; idempotent). The
+ * static Web client does not provide a `styles` global, so the plugin builds
+ * its own <style> element, mirroring how dsh-at-file ships its dock CSS.
+ */
+function adoptStyles(): void {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(STYLE_ID) !== null) return
+  const style = document.createElement('style')
+  style.id = STYLE_ID
+  style.textContent = CSS
+  document.head.appendChild(style)
+}
 
 interface PetState {
   turn: { seq: number; messageId: string; hits: any[] } | null
@@ -286,9 +307,7 @@ export function apply(ctx: any) {
   const selStore = createSelectStore()
   let petDrag: { sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null
   const deepCounts: Record<string, number> = {}
-  ctx.effect(function () {
-    return styles.insert(CSS)
-  })
+  adoptStyles()
 
   // Mount the `wwt` Typert Remote namespace and resolve its callable face.
   // The face comes from `ctx.reflect.get('remote.wwt')` — NOT the dotted
