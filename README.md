@@ -81,7 +81,7 @@ node build.mjs      # 打包 lib/index.js + lib/client.js，并复制 assets
 
 ## 👤 作者
 
-**作者是编码小白**。想法来自作者本人，实现借助 **DeepSeek Harness（DSH）** 协作完成，主要使用：
+**作者是编码小白（只会用办公软件那种）**。想法来自作者本人，实现借助 **DeepSeek Harness（DSH）** 协作完成，主要使用：
 - **deepseek-v4-flash** —— 主力编码
 - **glm-5.3** —— 方案对比 / 复核
 - **豆包生图模型 + doubao-seed-evolving** —— 形象设计与 AI 生图（doubao-seed-evolving 负责创作/理解，生图走豆包生图模型）
