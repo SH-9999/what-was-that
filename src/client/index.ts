@@ -391,11 +391,39 @@ export function apply(ctx: any) {
         }
         console.log('wwt: reflect handle =', wwt ? 'mounted (remote.wwt)' : 'UNDEFINED')
         if (!wwt) return
-        // 恢复设置里选定的固定模型（空 = 跟随对话用的大模型）。
+        const ww = wwt
+        // 恢复设置里选定的固定模型：跨 dsh 重启保持；若该模型已不在已配置列表里，
+        // 则退回跟随对话用的大模型并清空选择。
         const stored = wwtStoredRoute()
         if (stored) {
           const i = stored.indexOf('/')
-          if (i > 0) wwt.setRoute(stored.slice(0, i), stored.slice(i + 1))
+          const provider = stored.slice(0, i)
+          const model = stored.slice(i + 1)
+          if (provider && model) {
+            ww.models()
+              .then(function (r: any) {
+                const keep =
+                  r && r.ok && r.value && r.value.models.some(function (m: any) {
+                    return m.provider === provider && m.model === model
+                  })
+                if (keep) {
+                  ww.setRoute(provider, model)
+                } else {
+                  try {
+                    localStorage.removeItem(WWT_MODEL_KEY)
+                  } catch {
+                    /* ignore */
+                  }
+                  ww.setRoute('', '')
+                }
+              })
+              .catch(function () {
+                // 枚举失败则尽量沿用用户选的模型。
+                ww.setRoute(provider, model)
+              })
+          }
+        } else {
+          ww.setRoute('', '')
         }
         // Fetch the pet SVG frames now that the Remote is mounted, so the pet
         // shows the final assets instead of the inline fallback octopus.
@@ -860,7 +888,8 @@ export function apply(ctx: any) {
             return
           }
           const text = (sel.toString() || '').trim()
-          if (text.length < 2 || text.length > 300) {
+          // 超过 10 个字符多半是在复制/选中，不弹提示打扰。
+          if (text.length < 2 || text.length > 10) {
             selStore.clear()
             return
           }
@@ -1041,7 +1070,7 @@ export function apply(ctx: any) {
         React.createElement(
           'div',
           { style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
-          React.createElement('span', { style: { fontWeight: '600' } }, '选到词库外不认识的词时，弹「帮我解释」的小提示'),
+          React.createElement('span', { style: { fontWeight: '600' } }, '在对话区选词，选到词库外不认识的词时，弹「帮我解释」的小提示'),
           React.createElement(
             'span',
             { style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '18px' } },

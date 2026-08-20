@@ -1,7 +1,7 @@
 {
   "name": "what-was-that",
   "description": "A tiny octopus desktop pet that explains AI-jargon in plain language for the DeepSeek Harness web GUI.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
