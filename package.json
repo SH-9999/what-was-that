@@ -3,6 +3,25 @@
   "description": "A tiny octopus desktop pet that explains AI-jargon in plain language for the DeepSeek Harness web GUI.",
   "version": "0.1.9",
   "license": "MIT",
+  "homepage": "https://github.com/SH-9999/what-was-that",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SH-9999/what-was-that.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SH-9999/what-was-that/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "chat",
+    "explainer",
+    "jargon",
+    "octopus"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "main": "lib/index.js",
   "exports": {
