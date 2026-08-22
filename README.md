@@ -46,7 +46,7 @@ what-was-that/
 
 ### 安装（给 DSH 用户）
 
-已发布到 npm：`what-was-that@0.1.9`。在 DSH 的 profile 里一条命令装入并启用：
+已发布到 npm：`what-was-that@0.1.9`（压缩包仅 **212 KB**，轻量无负担）。在 DSH 的 profile 里一条命令装入并启用：
 
 ```bash
 # 要求：机器上已安装 pnpm（dsh plugin 命令依赖它）
@@ -86,6 +86,7 @@ node build.mjs      # 打包 lib/index.js + lib/client.js，并复制 assets
 - 🔒 **隐私红线**：不把完整回复发回模型；AI 深挖只发点中的词 ±80 字，带缓存
 
 ### 轻量优先
+- 📦 **npm 包很小**——压缩包仅 **212 KB**（解压 1.3 MB，含词库 255 条 + 四态形象 + 全部构建产物），比一张照片还小
 - 🪶 **零运行时依赖**——只用 DSH 自带接口
 - 🧾 **极小透明 SVG**（每张 15–20 KB）
 - ⚡ **启动快、占用小**
