@@ -3,6 +3,8 @@
 <p>
 <a href="https://github.com/topics/dsh-plugin"><code>dsh-plugin</code></a>
 <a href="https://github.com/SH-9999/what-was-that"><code>DeepSeek Harness 插件</code></a>
+<a href="https://www.npmjs.com/package/what-was-that"><code>npm: v0.1.9</code></a>
+<a href="https://github.com/SH-9999/what-was-that/actions"><code>CI: typecheck · test · build</code></a>
 <a href="https://github.com/SH-9999/what-was-that/blob/main/LICENSE"><code>MIT License</code></a>
 <a href="https://github.com/SH-9999/what-was-that"><code>静态插件</code></a>
 </p>
@@ -13,15 +15,16 @@
 
 ---
 
-## 🆕 本仓库：静态插件（第二阶段）
+## 📦 本仓库：已发布到 npm 的静态插件
 
-这是**第一阶段的正式移植**：把原型用的临时动态插件（粘贴 JS），重写成了规范的 **TypeScript 静态插件包**。
+从最初的动态插件原型（粘贴 JS），重写为规范的 **TypeScript 静态插件包**，现已发布到 npm（`what-was-that@0.1.9`）。
 
-### 相对第一阶段（原型）的改进
+### 相对原型阶段的改进
 - ✅ **TypeScript 源码**（`src/`），不再是一大段粘贴的字符串
 - ✅ **可移植**：资源（词库 / 宠物 SVG）随包内置，通过 `import.meta.url` 相对解析，**不再依赖写死的绝对路径**
-- ✅ **一键安装**：构建产物 `lib/` 提交，用户无需编译直接安装
-- ✅ **不污染环境**：只依赖 DSH 运行时提供的接口，无全局安装
+- ✅ **一键安装**：已发布到 npm，`dsh plugin --profile web add what-was-that` 一条命令即可（`lib/` 产物随包发布，无需编译）
+- ✅ **不污染环境**：只依赖 DSH 运行时提供的接口，无全局依赖
+- ✅ **自动回归**：GitHub Actions CI 在每次 push/PR 自动跑 typecheck + 测试 + 构建
 
 ### 目录结构
 ```
@@ -36,12 +39,23 @@ what-was-that/
 ├── lib/                  # 构建产物（提交，免编译安装）
 ├── dsh.plugin.json       # 插件声明
 ├── cordis.patch.yml      # 挂载点
+├── .github/workflows/ci.yml   # CI：typecheck + 测试 + 构建
 ├── build.mjs             # esbuild 构建脚本
 └── package.json
 ```
 
 ### 安装（给 DSH 用户）
-在 DSH 的插件配置里挂载 `cordis.patch.yml` 声明的 `what-was-that` 插件即可（`lib/` 已含全部产物，无需构建）。
+
+已发布到 npm：`what-was-that@0.1.9`。在 DSH 的 profile 里一条命令装入并启用：
+
+```bash
+# 要求：机器上已安装 pnpm（dsh plugin 命令依赖它）
+dsh plugin --profile web add what-was-that
+```
+
+装完**重启 `dsh web`** 并硬刷新（Ctrl+Shift+R），右下角出现小章鱼即成功。
+
+> 没有 pnpm 时，也可以把 `lib/` 产物放进 profile 手动挂载（`cordis.patch.yml` 声明了挂载点），无需编译。
 
 ### 本地构建（给开发者）
 ```bash
