@@ -34,8 +34,9 @@ const LONG_SYSTEM =
 /** Cordis plugin name (the Loader entry and client bundle id). */
 export const name = 'what-was-that'
 
-/** Hard dependency: the Typert registry that owns the `wwt` Remote manifest. */
-export const inject = ['typert']
+/** Hard dependencies: the Typert registry that owns the `wwt` Remote manifest,
+ * and the filesystem service (lexicon + pet SVG assets load through it). */
+export const inject = ['typert', 'fs']
 
 /** Locate package assets relative to this module (lib/index.js -> ../assets). */
 function assetsDir() {

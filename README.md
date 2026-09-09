@@ -3,7 +3,7 @@
 <p>
 <a href="https://github.com/topics/dsh-plugin"><code>dsh-plugin</code></a>
 <a href="https://github.com/SH-9999/what-was-that"><code>DeepSeek Harness 插件</code></a>
-<a href="https://www.npmjs.com/package/what-was-that"><code>npm: v0.1.9</code></a>
+<a href="https://www.npmjs.com/package/what-was-that"><code>npm: v0.1.10</code></a>
 <a href="https://github.com/SH-9999/what-was-that/actions"><code>CI: typecheck · test · build</code></a>
 <a href="https://github.com/SH-9999/what-was-that/blob/main/LICENSE"><code>MIT License</code></a>
 <a href="https://github.com/SH-9999/what-was-that"><code>静态插件</code></a>
@@ -17,7 +17,15 @@
 
 ## 📦 本仓库：已发布到 npm 的静态插件
 
-从最初的动态插件原型（粘贴 JS），重写为规范的 **TypeScript 静态插件包**，现已发布到 npm（`what-was-that@0.1.9`）。
+从最初的动态插件原型（粘贴 JS），重写为规范的 **TypeScript 静态插件包**，现已发布到 npm（`what-was-that@0.1.10`）。
+
+### ✅ 适配 DSH 0.1.5-alpha.1（v0.1.10）
+
+v0.1.10 已验证兼容 **DeepSeek Harness 0.1.5-alpha.1**，主要变更：
+
+- **修复 host 端 `fs` 服务注入**：0.1.5 中 `fs` 是独立的 cordis 服务，`ctx.get('fs')` 在插件 apply 阶段只有在 `inject` 中显式声明才能拿到。v0.1.10 将 host 入口 `inject` 从 `['typert']` 改为 `['typert', 'fs']`，**修复了启动时的 `wwt: no fs service` 警告**，本地词库（lexicon.json）与宠物 SVG 现在都能在启动阶段正常加载（此前只有运行时 remote 调用才能拿到 fs）。
+- **client 端依赖对齐**：移除 `dsh.client.inject` 与 `peerDependencies` 中 0.1.5 已不存在的 `@deepseek-ai/dsh-client-runtime` 包（0.1.5 的 client 运行时已并入 `dsh-client-modules` 模块系统）。client 端使用的 `slots` / `remote` / `connection` 三个服务在 0.1.5 中分别由 `dsh-client-ui-renderer`（slots 已打包进平台 seed）、`dsh-api-gateway`、`dsh-client-connection` 提供，无需改动。
+- 兼容性结论：**槽位 API 与 0.1.5 官方文档逐字一致**（`slots.inject` + `slots.register(spec, renderFn)`），`shell.overlay` / `conversation.chat.assistant-actions` / `settings.section` 三个挂载点在新版中全部保留。
 
 ### 相对原型阶段的改进
 - ✅ **TypeScript 源码**（`src/`），不再是一大段粘贴的字符串
@@ -46,7 +54,7 @@ what-was-that/
 
 ### 安装（给 DSH 用户）
 
-已发布到 npm：`what-was-that@0.1.9`（压缩包仅 **212 KB**，轻量无负担）。在 DSH 的 profile 里一条命令装入并启用：
+已发布到 npm：`what-was-that@0.1.10`（压缩包仅 **212 KB**，轻量无负担）。在 DSH 的 profile 里一条命令装入并启用：
 
 ```bash
 # 要求：机器上已安装 pnpm（dsh plugin 命令依赖它）
@@ -54,6 +62,8 @@ dsh plugin --profile web add what-was-that
 ```
 
 装完**重启 `dsh web`** 并硬刷新（Ctrl+Shift+R），右下角出现小章鱼即成功。
+
+> 适用版本：**DSH ≥ 0.1.5-alpha.1**（v0.1.10 起，inject 声明了 `fs` 服务，与 0.1.5 的新服务模型对齐）。
 
 > 没有 pnpm 时，也可以把 `lib/` 产物放进 profile 手动挂载（`cordis.patch.yml` 声明了挂载点），无需编译。
 
