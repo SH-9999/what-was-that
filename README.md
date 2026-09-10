@@ -3,7 +3,7 @@
 <p>
 <a href="https://github.com/topics/dsh-plugin"><code>dsh-plugin</code></a>
 <a href="https://github.com/SH-9999/what-was-that"><code>DeepSeek Harness 插件</code></a>
-<a href="https://www.npmjs.com/package/what-was-that"><code>npm: v0.1.10</code></a>
+<a href="https://www.npmjs.com/package/what-was-that"><code>npm: v0.1.11</code></a>
 <a href="https://github.com/SH-9999/what-was-that/actions"><code>CI: typecheck · test · build</code></a>
 <a href="https://github.com/SH-9999/what-was-that/blob/main/LICENSE"><code>MIT License</code></a>
 <a href="https://github.com/SH-9999/what-was-that"><code>静态插件</code></a>
@@ -17,15 +17,16 @@
 
 ## 📦 本仓库：已发布到 npm 的静态插件
 
-从最初的动态插件原型（粘贴 JS），重写为规范的 **TypeScript 静态插件包**，现已发布到 npm（`what-was-that@0.1.10`）。
+从最初的动态插件原型（粘贴 JS），重写为规范的 **TypeScript 静态插件包**，现已发布到 npm（`what-was-that@0.1.11`）。
 
-### ✅ 适配 DSH 0.1.5-alpha.1（v0.1.10）
+### ✅ 适配 DSH 0.1.5-rc.1（v0.1.11）
 
-v0.1.10 已验证兼容 **DeepSeek Harness 0.1.5-alpha.1**，主要变更：
+v0.1.11 已验证兼容 **DeepSeek Harness 0.1.5-rc.1**（0.1.5 系列首个候选版，汇总了自 0.1.2-rc.1 以来的全部变更），主要变更：
 
-- **修复 host 端 `fs` 服务注入**：0.1.5 中 `fs` 是独立的 cordis 服务，`ctx.get('fs')` 在插件 apply 阶段只有在 `inject` 中显式声明才能拿到。v0.1.10 将 host 入口 `inject` 从 `['typert']` 改为 `['typert', 'fs']`，**修复了启动时的 `wwt: no fs service` 警告**，本地词库（lexicon.json）与宠物 SVG 现在都能在启动阶段正常加载（此前只有运行时 remote 调用才能拿到 fs）。
+- **修复 `llm` 流 finish chunk 的 `reason` 形状变化**（v0.1.11）：0.1.5 中流式输出的结束 chunk `reason` 由字符串改为对象（`{ kind: 'error' | 'aborted', failure }`），旧版 `chunk.reason === 'error'` 的字符串比较永远不成立，导致 AI 深挖/解释**失败时**被误报为「模型没有返回内容」。现改为比较 `chunk.reason?.kind`，失败原因提示恢复准确（「模型调用未完成（error / aborted）」）。
+- **修复 host 端 `fs` 服务注入**（v0.1.10 起）：0.1.5 中 `fs` 是独立的 cordis 服务，`ctx.get('fs')` 在插件 apply 阶段只有在 `inject` 中显式声明才能拿到。host 入口 `inject` 从 `['typert']` 改为 `['typert', 'fs']`，**修复了启动时的 `wwt: no fs service` 警告**，本地词库（lexicon.json）与宠物 SVG 现在都能在启动阶段正常加载（此前只有运行时 remote 调用才能拿到 fs）。
 - **client 端依赖对齐**：移除 `dsh.client.inject` 与 `peerDependencies` 中 0.1.5 已不存在的 `@deepseek-ai/dsh-client-runtime` 包（0.1.5 的 client 运行时已并入 `dsh-client-modules` 模块系统）。client 端使用的 `slots` / `remote` / `connection` 三个服务在 0.1.5 中分别由 `dsh-client-ui-renderer`（slots 已打包进平台 seed）、`dsh-api-gateway`、`dsh-client-connection` 提供，无需改动。
-- 兼容性结论：**槽位 API 与 0.1.5 官方文档逐字一致**（`slots.inject` + `slots.register(spec, renderFn)`），`shell.overlay` / `conversation.chat.assistant-actions` / `settings.section` 三个挂载点在新版中全部保留。
+- 兼容性结论：**槽位 API 与 0.1.5 官方文档逐字一致**（`slots.inject` + `slots.register(spec, renderFn)`），`shell.overlay` / `conversation.chat.assistant-actions` / `settings.section` 三个挂载点在新版中全部保留；Typert Remote（`$mount` + `ctx.reflect.get('remote.wwt')`）与 `ctx.typert.register` 严格 manifest 机制在 0.1.5-rc.1 下全部有效。
 
 ### 相对原型阶段的改进
 - ✅ **TypeScript 源码**（`src/`），不再是一大段粘贴的字符串
@@ -54,7 +55,7 @@ what-was-that/
 
 ### 安装（给 DSH 用户）
 
-已发布到 npm：`what-was-that@0.1.10`（压缩包仅 **212 KB**，轻量无负担）。在 DSH 的 profile 里一条命令装入并启用：
+已发布到 npm：`what-was-that@0.1.11`（压缩包仅 **213 KB**，轻量无负担）。在 DSH 的 profile 里一条命令装入并启用：
 
 ```bash
 # 要求：机器上已安装 pnpm（dsh plugin 命令依赖它）
@@ -63,7 +64,7 @@ dsh plugin --profile web add what-was-that
 
 装完**重启 `dsh web`** 并硬刷新（Ctrl+Shift+R），右下角出现小章鱼即成功。
 
-> 适用版本：**DSH ≥ 0.1.5-alpha.1**（v0.1.10 起，inject 声明了 `fs` 服务，与 0.1.5 的新服务模型对齐）。
+> 适用版本：**DSH ≥ 0.1.5-rc.1**（v0.1.11 起，finish reason 判断已对齐 0.1.5 的流式 chunk 形状；v0.1.10 起 inject 声明了 `fs` 服务，与 0.1.5 的新服务模型对齐）。
 
 > 没有 pnpm 时，也可以把 `lib/` 产物放进 profile 手动挂载（`cordis.patch.yml` 声明了挂载点），无需编译。
 
@@ -96,7 +97,7 @@ node build.mjs      # 打包 lib/index.js + lib/client.js，并复制 assets
 - 🔒 **隐私红线**：不把完整回复发回模型；AI 深挖只发点中的词 ±80 字，带缓存
 
 ### 轻量优先
-- 📦 **npm 包很小**——压缩包仅 **212 KB**（解压 1.3 MB，含词库 255 条 + 四态形象 + 全部构建产物），比一张照片还小
+- 📦 **npm 包很小**——压缩包仅 **213 KB**（解压 1.3 MB，含词库 255 条 + 四态形象 + 全部构建产物），比一张照片还小
 - 🪶 **零运行时依赖**——只用 DSH 自带接口
 - 🧾 **极小透明 SVG**（每张 15–20 KB）
 - ⚡ **启动快、占用小**
