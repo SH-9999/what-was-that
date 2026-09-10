@@ -1,7 +1,7 @@
 {
   "name": "what-was-that",
   "description": "A tiny octopus desktop pet that explains AI-jargon in plain language for the DeepSeek Harness web GUI.",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "license": "MIT",
   "homepage": "https://github.com/SH-9999/what-was-that",
   "repository": {

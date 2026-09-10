@@ -160,8 +160,9 @@ export function apply(ctx: AnyCtx) {
       for await (const chunk of stream) {
         if (chunk.type === 'text-delta' && typeof chunk.text === 'string') out += chunk.text
         else if (chunk.type === 'reasoning-delta' && typeof chunk.text === 'string') reasoning += chunk.text
-        else if (chunk.type === 'finish' && (chunk.reason === 'error' || chunk.reason === 'aborted')) {
-          return { ok: false as const, error: '模型调用未完成（' + chunk.reason + '）' }
+        // DSH 0.1.5: finish chunk 的 reason 是对象 { kind: 'error' | 'aborted', failure } 而非字符串。
+        else if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted')) {
+          return { ok: false as const, error: '模型调用未完成（' + chunk.reason.kind + '）' }
         }
       }
     } catch (e: unknown) {
